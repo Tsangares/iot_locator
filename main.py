@@ -20,7 +20,7 @@ def receive_ip():
     secret = data.get('secret', None)
     if ip:
         ip_list.append(ip)
-        if secret is not None and ip not in ip_map[secret]:
+        if secret is not None and ip not in ip_map:
             ip_map[secret] = ip
         return f"IP {ip} added to the list."
     else:
