@@ -1,6 +1,11 @@
 from flask import Flask, request, jsonify, redirect
 from dotenv import load_dotenv
 import os, json, logging
+import pytz
+from datetime import datetime
+
+# Set the timezone
+timezone = pytz.timezone(os.getenv('TIMEZONE','US/Pacific'))
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,13 +18,19 @@ ip_list = []
 ip_map = {
     "apple": [ "127.0.0.1" ], 
 }
+timestamps = {}
 
 @app.route('/ip', methods=['POST'])
 def receive_ip():
     data = request.get_json()
-    ip = data.get('ip',None)
+    ip = data.get('ip', None)
     namespace = data.get('secret', None)
     if ip:
+        current_time = str(datetime.now(timezone))
+        if ip not in timestamps:
+            timestamps[ip] = [current_time]
+        else:
+            timestamps[ip].append(current_time)
         ip_list.append(ip)
         if namespace is not None:
             if ip not in ip_map:
@@ -44,7 +55,7 @@ def get_ip_list():
         return ip_map[namespace]
     
 def load_cache():
-    global ip_map, ip_list
+    global ip_map, ip_list, timestamps
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
     cache_file = os.path.join(DATA_DIR, 'cache.json')
@@ -54,6 +65,7 @@ def load_cache():
         cache = json.load(f)
         ip_map |= cache['map']
         ip_list += cache['list']
+        timestamps |= cache['timestamps']
 
 def save_cache():
     if not os.path.exists(DATA_DIR):
@@ -61,8 +73,24 @@ def save_cache():
     cache_file = os.path.join(DATA_DIR, 'cache.json')
     logging.warning(f"Saving cache to {cache_file}")
     with open(cache_file, 'w+') as f:
-        json.dump({'map': ip_map, 'list': ip_list}, f)
+        json.dump({'map': ip_map, 'list': ip_list, 'timestamps': timestamps}, f)
     
+@app.route('/lastseen', methods=['GET'])
+def last_seen():
+    view_key = request.args.get('view_key', None)
+    ip = request.args.get('ip', None)
+    if view_key is None or ip is None or view_key != VIEW_KEY:
+        return "No IP provided."
+    if ip not in timestamps and len(timestamps[ip]) == 0:
+        return "IP not found."
+    relative = request.args.get('relative', False)
+    if relative:
+        last_time = datetime.strptime(timestamps[ip][-1], "%Y-%m-%d %H:%M:%S.%f%z")
+        current_time = datetime.now(timezone)
+        delta = current_time - last_time
+        return str(delta.total_seconds())
+    else:
+        return timestamps[ip][-1]
 
 @app.route('/save', methods=['GET'])
 def save_endpoint():
