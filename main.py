@@ -31,7 +31,8 @@ def receive_ip():
             timestamps[ip] = [current_time]
         else:
             timestamps[ip].append(current_time)
-        ip_list.append(ip)
+        if ip not in ip_list:
+            ip_list.append(ip)
         if namespace is not None:
             if ip not in ip_map:
                 ip_map[namespace] = [ip]
