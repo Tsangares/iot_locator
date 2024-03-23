@@ -75,16 +75,8 @@ def save_cache():
     logging.warning(f"Saving cache to {cache_file}")
     with open(cache_file, 'w+') as f:
         json.dump({'map': ip_map, 'list': ip_list, 'timestamps': timestamps}, f)
-    
-@app.route('/lastseen', methods=['GET'])
-def last_seen():
-    view_key = request.args.get('view_key', None)
-    ip = request.args.get('ip', None)
-    if view_key is None or ip is None or view_key != VIEW_KEY:
-        return "No IP provided."
-    if ip not in timestamps and len(timestamps[ip]) == 0:
-        return "IP not found."
-    relative = request.args.get('relative', False)
+
+def get_time_of_ip(ip, relative=False):
     if relative:
         last_time = datetime.strptime(timestamps[ip][-1], "%Y-%m-%d %H:%M:%S.%f%z")
         current_time = datetime.now(timezone)
@@ -92,6 +84,21 @@ def last_seen():
         return str(delta.total_seconds())
     else:
         return timestamps[ip][-1]
+
+@app.route('/lastseen', methods=['GET'])
+def last_seen():
+    view_key = request.args.get('view_key', None)
+    ip = request.args.get('ip', None)
+    namespace = request.args.get('secret', None)
+    if view_key is None or view_key != VIEW_KEY:
+        return redirect('/')
+    if ip not in timestamps or len(timestamps[ip]) == 0:
+        if namespace is None: return "IP not found."
+    if namespace not in ip_map:
+        return "Namespace not found."
+    relative = request.args.get('relative', False)
+    ips = ip_map[namespace]
+    return {ip: get_time_of_ip(ip,relative) for ip in ips}
 
 @app.route('/save', methods=['GET'])
 def save_endpoint():
